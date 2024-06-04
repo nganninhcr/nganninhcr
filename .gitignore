@@ -1,52 +1,9 @@
-# Compiled Object files
-*.slo
-*.lo
-*.o
-*.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-*.lnk
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-
-# Compiled Static libraries
-*.lai
-*.la
-*.a
-*.lib
-
-# Executables
-*.miss
-*.exe
-*.out
-*.app
-*~
-*.pyc
-*.mpi
-*.exe
-*tmp*
-*.rabit
-*.mock
-recommonmark
-recom
-_*
-
-#mpi lib
-mpich/
-mpich-3.2/
-
-# Jetbrain
-.idea
-cmake-build-debug/
-.vscode/
-
-# cmake
+.gradle/
+.idea/
+app/app.iml
+app/build/
 build/
-compile_commands.json
+lib/build/
+lib/lib.iml
+*.iml
+local.properties
