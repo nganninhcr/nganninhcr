@@ -1,58 +1,114 @@
-# Robinhood Shell
+Liner
+=====
 
-Robinhood Shell is a command line shell for trading stocks using [Robinhood](https://robinhood.com/).
+Liner is a command line editor with history. It was inspired by linenoise;
+everything Unix-like is a VT100 (or is trying very hard to be). If your
+terminal is not pretending to be a VT100, change it. Liner also support
+Windows.
 
-![Robinhood Shell](https://i.imgur.com/XjrtYXB.png)
+Liner is intended for use by cross-platform applications. Therefore, the
+decision was made to write it in pure Go, avoiding cgo, for ease of cross
+compilation. Furthermore, features only supported on some platforms have
+been intentionally omitted. For example, Ctrl-Z is "suspend" on Unix, but
+"EOF" on Windows. In the interest of making an application behave the same
+way on every supported platform, Ctrl-Z is ignored by Liner.
 
-Commands Supported
-------------------
+Liner is released under the X11 license (which is similar to the new BSD
+license).
 
-* `l` : Lists your current portfolio
-* `b <symbol> <quantity> <price>` : Submits a limit order to buy <quantity> stocks of <symbol> at <price>
-* `s <symbol> <quantity> <price>` : Submits a limit order to sell <quantity> stocks of <symbol> at <price>
-* `q <symbol>` : Get quote (current price) for symbol
-* `q <symbol> <call/put> <strike_price> <(optional) expiration_date YYYY-mm-dd>` : Get quote for option, all expiration dates if none specified
-* `o` : Lists all open orders
-* `c <id>` : Cancel an open order identified by <id> [<id> of a open order can be got from output of `o`]
-* `bye` : Exit the shell  
+Line Editing
+------------
 
-Setup
------
+The following line editing commands are supported on platforms and terminals
+that Liner supports:
 
-If you don't have a Robinhood account, sign up for Robinhood. It is a free stock trading platform. Use my [referral link](https://share.robinhood.com/brianp668/) to sign up and get one free stock :) 
+Keystroke    | Action
+---------    | ------
+Ctrl-A, Home | Move cursor to beginning of line
+Ctrl-E, End  | Move cursor to end of line
+Ctrl-B, Left | Move cursor one character left
+Ctrl-F, Right| Move cursor one character right
+Ctrl-Left, Alt-B    | Move cursor to previous word
+Ctrl-Right, Alt-F   | Move cursor to next word
+Ctrl-D, Del  | (if line is *not* empty) Delete character under cursor
+Ctrl-D       | (if line *is* empty) End of File - usually quits application
+Ctrl-C       | Reset input (create new empty prompt)
+Ctrl-L       | Clear screen (line is unmodified)
+Ctrl-T       | Transpose previous character with current character
+Ctrl-H, BackSpace | Delete character before cursor
+Ctrl-W, Alt-BackSpace | Delete word leading up to cursor
+Alt-D        | Delete word following cursor
+Ctrl-K       | Delete from cursor to end of line
+Ctrl-U       | Delete from start of line to cursor
+Ctrl-P, Up   | Previous match from history
+Ctrl-N, Down | Next match from history
+Ctrl-R       | Reverse Search history (Ctrl-S forward, Ctrl-G cancel)
+Ctrl-Y       | Paste from Yank buffer (Alt-Y to paste next yank instead)
+Tab          | Next completion
+Shift-Tab    | (after Tab) Previous completion
 
-Before you begin, make sure you have `Python3` installed. Robinhood shell only works with python3. Some of the functionality is broken on python2.7 
+Note that "Previous" and "Next match from history" will retain the part of
+the line that the user has already typed, similar to zsh's
+"up-line-or-beginning-search" (which is the default on some systems) or
+bash's "history-search-backward" (which is my preferred behaviour, but does
+not appear to be the default `Up` keybinding on any system).
 
-1. Download Robinhood Shell by downloading the zip file ([link](https://github.com/anilshanbhag/RobinhoodShell/archive/dev.zip)) OR by using git 
+Getting started
+-----------------
 
+```go
+package main
+
+import (
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/peterh/liner"
+)
+
+var (
+	history_fn = filepath.Join(os.TempDir(), ".liner_example_history")
+	names      = []string{"john", "james", "mary", "nancy"}
+)
+
+func main() {
+	line := liner.NewLiner()
+	defer line.Close()
+
+	line.SetCtrlCAborts(true)
+
+	line.SetCompleter(func(line string) (c []string) {
+		for _, n := range names {
+			if strings.HasPrefix(n, strings.ToLower(line)) {
+				c = append(c, n)
+			}
+		}
+		return
+	})
+
+	if f, err := os.Open(history_fn); err == nil {
+		line.ReadHistory(f)
+		f.Close()
+	}
+
+	if name, err := line.Prompt("What is your name? "); err == nil {
+		log.Print("Got: ", name)
+		line.AppendHistory(name)
+	} else if err == liner.ErrPromptAborted {
+		log.Print("Aborted")
+	} else {
+		log.Print("Error reading line: ", err)
+	}
+
+	if f, err := os.Create(history_fn); err != nil {
+		log.Print("Error writing history file: ", err)
+	} else {
+		line.WriteHistory(f)
+		f.Close()
+	}
+}
 ```
-git clone https://github.com/anilshanbhag/RobinhoodShell.git
 
-cd RobinhoodShell
-```
-
-2. Install the dependencies
-```
-pip install -r requirements.txt
-```
-
-3. Create and save your username/password in the config file
-```
-cp config.py.sample config.py
-# Edit config.py - replace username/password with your real username/password
-# Set CHALLENGE_TYPE = 'sms' or 'email' depending on how you want to do 2FA
-```
-
-You are good to go. Start the shell by
-```
-chmod +x shell.py
-./shell.py
-```
-
-Credits
--------
-The shell builds on [Robinhood Python API wrapper](https://github.com/Jamonek/Robinhood) by Jamonek
-
-Disclaimer
----------
-Robinhood Shell is not associated with the Robinhood app or endorsed by it.
+For documentation, see http://godoc.org/github.com/peterh/liner
