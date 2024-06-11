@@ -1,114 +1,104 @@
-Liner
-=====
+# knitr
 
-Liner is a command line editor with history. It was inspired by linenoise;
-everything Unix-like is a VT100 (or is trying very hard to be). If your
-terminal is not pretending to be a VT100, change it. Liner also support
-Windows.
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/yihui/knitr/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/yihui/knitr/actions/workflows/R-CMD-check.yaml)
+[![Check knitr examples](https://github.com/yihui/knitr/actions/workflows/knitr-examples.yaml/badge.svg)](https://github.com/yihui/knitr/actions/workflows/knitr-examples.yaml)
+[![Codecov test coverage](https://codecov.io/gh/yihui/knitr/branch/master/graph/badge.svg)](https://app.codecov.io/gh/yihui/knitr?branch=master)
+[![CRAN release](https://www.r-pkg.org/badges/version/knitr)](https://cran.r-project.org/package=knitr)
+<!-- badges: end -->
 
-Liner is intended for use by cross-platform applications. Therefore, the
-decision was made to write it in pure Go, avoiding cgo, for ease of cross
-compilation. Furthermore, features only supported on some platforms have
-been intentionally omitted. For example, Ctrl-Z is "suspend" on Unix, but
-"EOF" on Windows. In the interest of making an application behave the same
-way on every supported platform, Ctrl-Z is ignored by Liner.
+The R package **knitr** is a general-purpose literate programming engine,
+with lightweight API's designed to give users full control of the output
+without heavy coding work. It combines many features into one package with
+slight tweaks motivated from my everyday use of Sweave. See the package
+[homepage](https://yihui.org/knitr/) for details and examples. See
+[FAQ's](https://yihui.org/knitr/faq/) for a list of
+frequently asked questions (including where to ask questions).
 
-Liner is released under the X11 license (which is similar to the new BSD
-license).
+## Installation
 
-Line Editing
-------------
+You can install the stable version on
+[CRAN](https://cran.r-project.org/package=knitr):
 
-The following line editing commands are supported on platforms and terminals
-that Liner supports:
-
-Keystroke    | Action
----------    | ------
-Ctrl-A, Home | Move cursor to beginning of line
-Ctrl-E, End  | Move cursor to end of line
-Ctrl-B, Left | Move cursor one character left
-Ctrl-F, Right| Move cursor one character right
-Ctrl-Left, Alt-B    | Move cursor to previous word
-Ctrl-Right, Alt-F   | Move cursor to next word
-Ctrl-D, Del  | (if line is *not* empty) Delete character under cursor
-Ctrl-D       | (if line *is* empty) End of File - usually quits application
-Ctrl-C       | Reset input (create new empty prompt)
-Ctrl-L       | Clear screen (line is unmodified)
-Ctrl-T       | Transpose previous character with current character
-Ctrl-H, BackSpace | Delete character before cursor
-Ctrl-W, Alt-BackSpace | Delete word leading up to cursor
-Alt-D        | Delete word following cursor
-Ctrl-K       | Delete from cursor to end of line
-Ctrl-U       | Delete from start of line to cursor
-Ctrl-P, Up   | Previous match from history
-Ctrl-N, Down | Next match from history
-Ctrl-R       | Reverse Search history (Ctrl-S forward, Ctrl-G cancel)
-Ctrl-Y       | Paste from Yank buffer (Alt-Y to paste next yank instead)
-Tab          | Next completion
-Shift-Tab    | (after Tab) Previous completion
-
-Note that "Previous" and "Next match from history" will retain the part of
-the line that the user has already typed, similar to zsh's
-"up-line-or-beginning-search" (which is the default on some systems) or
-bash's "history-search-backward" (which is my preferred behaviour, but does
-not appear to be the default `Up` keybinding on any system).
-
-Getting started
------------------
-
-```go
-package main
-
-import (
-	"log"
-	"os"
-	"path/filepath"
-	"strings"
-
-	"github.com/peterh/liner"
-)
-
-var (
-	history_fn = filepath.Join(os.TempDir(), ".liner_example_history")
-	names      = []string{"john", "james", "mary", "nancy"}
-)
-
-func main() {
-	line := liner.NewLiner()
-	defer line.Close()
-
-	line.SetCtrlCAborts(true)
-
-	line.SetCompleter(func(line string) (c []string) {
-		for _, n := range names {
-			if strings.HasPrefix(n, strings.ToLower(line)) {
-				c = append(c, n)
-			}
-		}
-		return
-	})
-
-	if f, err := os.Open(history_fn); err == nil {
-		line.ReadHistory(f)
-		f.Close()
-	}
-
-	if name, err := line.Prompt("What is your name? "); err == nil {
-		log.Print("Got: ", name)
-		line.AppendHistory(name)
-	} else if err == liner.ErrPromptAborted {
-		log.Print("Aborted")
-	} else {
-		log.Print("Error reading line: ", err)
-	}
-
-	if f, err := os.Create(history_fn); err != nil {
-		log.Print("Error writing history file: ", err)
-	} else {
-		line.WriteHistory(f)
-		f.Close()
-	}
-}
+```r
+install.packages('knitr')
 ```
 
-For documentation, see http://godoc.org/github.com/peterh/liner
+You can also install the development version (hourly build) from
+<https://yihui.r-universe.dev>:
+
+```r
+options(repos = c(
+  yihui = 'https://yihui.r-universe.dev',
+  CRAN = 'https://cloud.r-project.org'
+))
+
+install.packages('knitr')
+```
+
+## Motivation
+
+While Sweave and related add-on packages like
+[**cacheSweave**](https://cran.r-project.org/package=cacheSweave) and
+[**pgfSweave**](https://cran.r-project.org/package=pgfSweave) are fairly good
+engines for literate programming in R, I often feel my hands are tied.
+For example:
+
+- I stared at the source code of Sweave and wished for hundreds of times,
+  *if only I could easily insert* `[width=.8\textwidth]` *between*
+  `\includegraphics` *and* `{my-plot.pdf}`. (The official way in Sweave is
+  `\setkeys{Gin}` but it is setting a global width, which is unrealistic
+  since we often have to set widths individually; yes, you can use
+  `\setkeys{Gin}` for many times, but why not just provide an option for
+  each chunk?)
+- I wished for many times, *if only I could use graphics devices other
+  than PDF and postscript*; now the dream has come true in the official R,
+  but what I was hoping for was an option as simple as `dev = 'png'` or `dev
+  = 'CairoJPEG'`.
+- I wished multiple plots in a code chunk could be recorded instead of only
+  the last one.
+- I wished there was a way to round the numbers in `\Sexpr{}` other than
+  writing expressions like `\Sexpr{round(x, 3)}` for *each single* `\Sexpr{}`
+- I wished I did not have to `print()` plots from.
+  [**ggplot2**](https://cran.r-project.org/package=ggplot2) and a simple
+  `qplot(x, y)` would just give me a plot in Sweave.
+- I wished users would never need instructions on `Sweave.sty` or run into
+  troubles due to the fact that LaTeX cannot find `Sweave.sty`.
+- I wished **cacheSweave** could print the results of a code chunk even if
+  it was cached.
+- I wished [**brew**](https://cran.r-project.org/package=brew) could support
+  graphics.
+- I wished [**R2HTML**](https://cran.r-project.org/package=R2HTML) could
+  support R code syntax highlighting.
+- ...
+
+
+[<img src="http://i.imgur.com/yYw46aF.jpg" align="right" alt="The book Dynamic Documents with R and knitr" />](https://www.amazon.com/dp/1498716962/)
+
+The package **knitr** was designed to give the user access to every part of
+the process of dealing with a literate programming document, so there is no
+need to hack at any core components if you want more freedom. I have gone
+through the source code of **pgfSweave** and **cacheSweave** for a couple of
+times and I often feel uncomfortable with the large amount of code copied
+from official R, especially when R has a new version released (I will begin
+to worry if the add-on packages are still up-to-date with the official
+Sweave).
+
+## Usage
+
+```r
+library(knitr)
+?knit
+knit(input)
+```
+
+If options are not explicitly specified, **knitr** will try to guess
+reasonable default settings. A few manuals are available such as the [main
+manual](https://yihui.org/knitr/demo/manual/), and the
+[graphics
+manual](https://yihui.org/knitr/demo/graphics/). For a
+more organized reference, see the [knitr book](https://www.amazon.com/dp/1498716962/).
+
+## License
+
+This package is free and open source software, licensed under GPL.

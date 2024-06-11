@@ -1,104 +1,56 @@
-OS := $(shell uname)
+# prepare the package for release
+PKGNAME := $(shell sed -n "s/Package: *\([^ ]*\)/\1/p" DESCRIPTION)
+PKGVERS := $(shell sed -n "s/Version: *\([^ ]*\)/\1/p" DESCRIPTION)
+PKGSRC  := $(shell basename `pwd`)
 
-RABIT_BUILD_DMLC = 0
+all: check clean
 
-export WARNFLAGS= -Wall -Wextra -Wno-unused-parameter -Wno-unknown-pragmas -std=c++11
-export CFLAGS = -O3 $(WARNFLAGS)
-export LDFLAGS =-Llib
+deps:
+	tlmgr install pgf preview xcolor;\
+	Rscript -e 'if (!require("Rd2roxygen")) install.packages("Rd2roxygen", repos="http://cran.rstudio.com")'
 
-#download mpi
-#echo $(shell scripts/mpi.sh)
+docs:
+	R -q -e 'library(Rd2roxygen); rab(".", build = FALSE)'
 
-MPICXX=./mpich/bin/mpicxx
+build:
+	cd ..;\
+	R CMD build --no-manual $(PKGSRC)
 
-export CXX = g++
+build-cran:
+	cd ..;\
+	R CMD build $(PKGSRC)
 
+install: build
+	cd ..;\
+	R CMD INSTALL $(PKGNAME)_$(PKGVERS).tar.gz
 
-#----------------------------
-# Settings for power and arm arch
-#----------------------------
-ARCH := $(shell uname -a)
-ifneq (,$(filter $(ARCH), armv6l armv7l powerpc64le ppc64le aarch64))
-	CFLAGS += -march=native
-else
-	CFLAGS += -msse2
-endif
+check: build-cran
+	cd ..;\
+	R CMD check $(PKGNAME)_$(PKGVERS).tar.gz --as-cran
 
-ifndef WITH_FPIC
-	WITH_FPIC = 1
-endif
-ifeq ($(WITH_FPIC), 1)
-	CFLAGS += -fPIC
-endif
+travis: build
+	cd ..;\
+	R CMD check $(PKGNAME)_$(PKGVERS).tar.gz --no-manual
 
-ifndef LINT_LANG
-	LINT_LANG="all"
-endif
+integration-run:
+	xvfb-run make deps knit -C knitr-examples
 
-ifeq ($(RABIT_BUILD_DMLC),1)
-    DMLC=dmlc-core
-else
-    DMLC=../dmlc-core
-endif
+integration-verify:
+	GIT_PAGER=cat make diff -C knitr-examples
 
-CFLAGS += -I $(DMLC)/include -I include/
+integration: install integration-run integration-verify
 
-# build path
-BPATH=.
-# objectives that makes up rabit library
-MPIOBJ= $(BPATH)/engine_mpi.o
-OBJ= $(BPATH)/allreduce_base.o $(BPATH)/allreduce_robust.o $(BPATH)/engine.o $(BPATH)/engine_empty.o $(BPATH)/engine_mock.o\
-	$(BPATH)/c_api.o $(BPATH)/engine_base.o
-SLIB= lib/librabit.so lib/librabit_mock.so lib/librabit_base.so
-ALIB= lib/librabit.a lib/librabit_empty.a lib/librabit_mock.a lib/librabit_base.a
-MPISLIB= lib/librabit_mpi.so
-MPIALIB= lib/librabit_mpi.a
-HEADERS=src/*.h include/rabit/*.h include/rabit/internal/*.h
+examples:
+	cd inst/examples;\
+	Rscript knit-all.R
 
-.PHONY: clean all install mpi python lint doc doxygen
-
-all: lib/librabit.a lib/librabit_mock.a  lib/librabit.so lib/librabit_base.a lib/librabit_mock.so
-mpi: lib/librabit_mpi.a lib/librabit_mpi.so
-
-$(BPATH)/allreduce_base.o: src/allreduce_base.cc $(HEADERS)
-$(BPATH)/engine.o: src/engine.cc $(HEADERS)
-$(BPATH)/allreduce_robust.o: src/allreduce_robust.cc $(HEADERS)
-$(BPATH)/engine_mpi.o: src/engine_mpi.cc $(HEADERS)
-$(BPATH)/engine_empty.o: src/engine_empty.cc $(HEADERS)
-$(BPATH)/engine_mock.o: src/engine_mock.cc $(HEADERS)
-$(BPATH)/engine_base.o: src/engine_base.cc $(HEADERS)
-$(BPATH)/c_api.o: src/c_api.cc $(HEADERS)
-
-lib/librabit.a lib/librabit.so: $(BPATH)/allreduce_base.o $(BPATH)/allreduce_robust.o $(BPATH)/engine.o $(BPATH)/c_api.o
-lib/librabit_base.a lib/librabit_base.so: $(BPATH)/allreduce_base.o $(BPATH)/engine_base.o $(BPATH)/c_api.o
-lib/librabit_mock.a lib/librabit_mock.so: $(BPATH)/allreduce_base.o $(BPATH)/allreduce_robust.o $(BPATH)/engine_mock.o $(BPATH)/c_api.o
-lib/librabit_empty.a: $(BPATH)/engine_empty.o $(BPATH)/c_api.o
-lib/librabit_mpi.a lib/librabit_mpi.so: $(MPIOBJ)
-
-$(OBJ) :
-	$(CXX) -c $(CFLAGS) -o $@ $(firstword $(filter %.cpp %.c %.cc, $^) )
-
-$(ALIB):
-	ar cr $@ $+
-
-$(SLIB) :
-	$(CXX) $(CFLAGS) -shared -o $@ $(filter %.cpp %.o %.c %.cc %.a, $^) $(LDFLAGS)
-
-$(MPIOBJ) :
-	$(MPICXX) -c $(CFLAGS) -I./mpich/include -o $@ $(firstword $(filter %.cpp %.c %.cc, $^) )
-
-$(MPIALIB):
-	ar cr $@ $+
-
-$(MPISLIB) :
-	$(MPICXX) $(CFLAGS) -I./mpich/include -shared -o $@ $(filter %.cpp %.o %.c %.cc %.a, $^) \
-	$(LDFLAGS) -L./mpich/lib -Wl,-rpath,./mpich/lib -lmpi
-
-lint:
-	$(DMLC)/scripts/lint.py rabit $(LINT_LANG) src include
-
-doc doxygen:
-	cd include; doxygen ../doc/Doxyfile; cd -
+vignettes:
+	cd vignettes;\
+	lyx -e knitr knitr-refcard.lyx;\
+	sed -i '/\\usepackage{breakurl}/ d' knitr-refcard.Rnw;\
+	mv knitr-refcard.Rnw assets/template-refcard.tex
 
 clean:
-	$(RM)  $(OBJ) $(MPIOBJ) $(ALIB) $(MPIALIB) $(SLIB) *~ src/*~ include/*~ include/*/*~
+	cd ..;\
+	$(RM) -r $(PKGNAME).Rcheck/
+
